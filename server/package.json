@@ -1,0 +1,1 @@
+{"description":"薅羊毛本地后端：无状态中转，账号绑定登录请求转发到平台接口，不保存任何会话。","engines":{"node":">=18"},"name":"hao-yang-mao-server","private":true,"scripts":{"start":"node server.js"},"version":"0.2.0"}
