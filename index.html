@@ -14,7 +14,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="deals" role="tab">线报</button>
       <button class="tab" data-tab="resources" role="tab">我的资源</button>
-      <button class="tab" data-tab="accounts" role="tab">账号绑定</button>
+      <button class="tab" data-tab="coupons" role="tab">我的券</button>
       <button class="tab" data-tab="checkins" role="tab">每日签到</button>
     </nav>
   </div>
@@ -31,11 +31,6 @@
     <div class="filter-group" id="platformFilters" aria-label="按平台筛选"></div>
     <div class="filter-group" id="typeFilters" aria-label="按类型筛选"></div>
     <div class="toolbar sub">
-      <label class="fav-only">归属账号
-        <select id="accountFilter" class="select-inline">
-          <option value="">全部账号</option>
-        </select>
-      </label>
       <button id="importBtn" class="btn small">导入线报 JSON</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <button id="resetDealsBtn" class="btn small ghost">恢复内置数据</button>
@@ -76,11 +71,6 @@
         <label>到期日期 <input id="resExpires" type="date"></label>
       </div>
       <label>备注 <input id="resNote" maxlength="200" placeholder="套餐、额度、注意事项等"></label>
-      <label>归属账号
-        <select id="resAccount">
-          <option value="">不指定</option>
-        </select>
-      </label>
       <div class="form-actions">
         <button type="submit" class="btn">保存</button>
         <button type="button" id="resCancel" class="btn ghost hidden">取消编辑</button>
@@ -90,57 +80,59 @@
     <p class="empty hidden" id="resourceEmpty">暂无已登记资源，点击上方表单添加。</p>
   </section>
 
-  <!-- 账号绑定 -->
-  <section id="tab-accounts" class="panel">
-    <p class="section-note" id="backendNote">正在检查本地后端…</p>
-    <div id="accountsMain" class="hidden">
-      <div class="card consent">
-        <label class="consent-line">
-          <input type="checkbox" id="consentBox">
-          <span>已阅读并同意：绑定平台账号时，登录请求由本机后端转发到平台自己的登录接口；登录成功后的会话只保存在本机浏览器（localStorage），不上传到任何服务器；解绑即清除本机保存的会话。本工具不收集账号、手机号、验证码。</span>
-        </label>
+  <!-- 我的券 -->
+  <section id="tab-coupons" class="panel">
+    <p class="section-note">从各平台 App 复制券链接粘贴进来，平台自动识别；短链、跳转链接认不出来时手动选平台。券按平台和账号标签归类，到期前提醒，点链接去领。无需登录，不用后端。</p>
+    <form id="couponForm" class="card form">
+      <h2>收券</h2>
+      <label>券链接 <input id="cpUrl" type="url" required maxlength="1000" placeholder="粘贴券链接，例如 https://…"></label>
+      <p class="hint" id="cpDetected">粘贴链接后自动识别平台</p>
+      <div class="form-row">
+        <label>标题 <input id="cpTitle" maxlength="120" placeholder="券的名称，没有可留空"></label>
+        <label>面额 <input id="cpAmount" maxlength="40" placeholder="例如：满 100 减 20，没有可留空"></label>
       </div>
-
-      <div class="card">
-        <h2>绑定新账号</h2>
-        <div class="form-row">
-          <label>平台
-            <select id="bindPlatform"></select>
-          </label>
-          <label>方式
-            <select id="bindMethod">
-              <option value="qr">扫码登录</option>
-              <option value="sms">短信登录</option>
-            </select>
-          </label>
-        </div>
-        <p class="hint" id="methodNote"></p>
-        <div id="qrBox" class="qr-box hidden">
-          <img id="qrImg" alt="登录二维码" class="qr-img">
-          <p class="qr-status" id="qrStatus">请用对应平台 App 扫码</p>
-          <div class="form-actions">
-            <button type="button" id="qrStartBtn" class="btn">获取二维码</button>
-            <button type="button" id="qrRefreshBtn" class="btn ghost hidden">重新获取</button>
-          </div>
-        </div>
-        <div id="smsBox" class="hidden">
-          <div class="form-row">
-            <label>手机号 <input id="smsPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位手机号"></label>
-            <label>验证码 <input id="smsCode" type="text" inputmode="numeric" maxlength="6" placeholder="6 位短信验证码"></label>
-          </div>
-          <div class="form-actions">
-            <button type="button" id="smsSendBtn" class="btn">发送验证码</button>
-            <button type="button" id="smsVerifyBtn" class="btn">验证并绑定</button>
-          </div>
-          <p class="hint" id="smsStatus"></p>
-        </div>
+      <div class="form-row">
+        <label>到期日期 <input id="cpExpires" type="date"></label>
+        <label>账号标签 <input id="cpTag" maxlength="20" placeholder="例如：主号 / 小号，没有可留空"></label>
       </div>
-
-      <h2 class="sub-title">已绑定账号</h2>
-      <div id="accountList" class="account-list"></div>
-      <p class="empty hidden" id="accountEmpty">暂无已绑定账号。</p>
-      <p class="hint">解绑后，本机浏览器里保存的该账号会话立即清除；平台侧的登录状态不受影响，如需彻底退出请在平台 App 内操作。</p>
+      <label>平台
+        <select id="cpPlatform">
+          <option value="auto">自动识别</option>
+          <option value="京东">京东</option>
+          <option value="淘宝">淘宝</option>
+          <option value="拼多多">拼多多</option>
+          <option value="抖音">抖音</option>
+          <option value="美团">美团</option>
+          <option value="银行App">银行App</option>
+          <option value="其他">其他</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn">收券</button>
+      </div>
+    </form>
+    <div class="toolbar">
+      <input id="couponSearch" type="search" placeholder="搜索标题、链接或账号标签…" aria-label="搜索券">
+      <span class="count" id="couponCount"></span>
     </div>
+    <div class="filter-group" id="couponPlatformFilters" aria-label="按平台筛选"></div>
+    <div class="toolbar sub">
+      <label class="fav-only">账号标签
+        <select id="couponTagFilter" class="select-inline">
+          <option value="">全部标签</option>
+        </select>
+      </label>
+      <label class="fav-only">状态
+        <select id="couponStatusFilter" class="select-inline">
+          <option value="all">全部</option>
+          <option value="unused">未使用</option>
+          <option value="used">已使用</option>
+          <option value="expired">已过期</option>
+        </select>
+      </label>
+    </div>
+    <div id="couponList" class="coupon-list"></div>
+    <p class="empty hidden" id="couponEmpty">暂无券，粘贴券链接收进来。</p>
   </section>
 
   <!-- 每日签到 -->

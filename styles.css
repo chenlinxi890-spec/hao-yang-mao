@@ -207,36 +207,22 @@ main { padding: 20px 0 40px; }
   background: #fff;
 }
 
-.consent { background: #fffbeb; border-color: #fde68a; }
-.consent-line { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
-.consent-line input { margin-top: 4px; flex-shrink: 0; }
+.coupon-list { display: grid; gap: 12px; }
+.coupon { display: flex; gap: 12px; align-items: flex-start; }
+.coupon .info { flex: 1; min-width: 0; }
+.coupon h3 { margin: 0 0 4px; font-size: 16px; }
+.coupon h3 a { color: var(--ink); text-decoration: none; }
+.coupon h3 a:hover { color: var(--brand); text-decoration: underline; }
+.coupon p { margin: 2px 0; font-size: 13px; color: var(--muted); }
+.coupon .url-line { word-break: break-all; }
+.coupon .actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.coupon .actions .btn { text-decoration: none; }
+.badge.warn { background: #fef3c7; color: var(--accent); }
+.badge.tag { background: #e0e7ff; color: #3730a3; }
+.expiring { color: #b45309; font-weight: 600; }
+.coupon.is-expiring { border-color: #fcd34d; background: #fffbeb; }
+.coupon.is-expired { opacity: .65; }
 
-.qr-box { text-align: center; padding: 12px 0 4px; }
-.qr-img {
-  width: 200px;
-  height: 200px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-}
-.qr-status { color: var(--muted); font-size: 14px; margin: 10px 0; }
-
-.account-list { display: grid; gap: 12px; }
-.account { display: flex; gap: 12px; align-items: flex-start; }
-.account .info { flex: 1; min-width: 0; }
-.account h3 { margin: 0 0 4px; font-size: 16px; }
-.account p { margin: 2px 0; font-size: 13px; color: var(--muted); }
-.account .actions { display: flex; gap: 6px; flex-shrink: 0; }
-
-.assign { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
-.assign select {
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 12px;
-  background: #fff;
-  max-width: 140px;
-}
 .empty { color: var(--muted); text-align: center; padding: 24px 0; }
 .hidden { display: none !important; }
 
