@@ -7,6 +7,8 @@ const LS = {
   resources: 'hym_resources',
   checkins: 'hym_checkins',
   dealsOverride: 'hym_deals_override',
+  accounts: 'hym_accounts',
+  dealAccounts: 'hym_deal_accounts',
 };
 
 const PLATFORM_LABELS = {
@@ -86,6 +88,7 @@ function filteredDeals() {
   return deals.filter((d) => {
     if (!matchPlatform(d) || !matchType(d)) return false;
     if (favOnly && !favorites.has(d.url)) return false;
+    if (accountFilter && dealAccounts[d.url] !== accountFilter) return false;
     if (q) {
       const hay = ((d.title || '') + ' ' + (d.summary || '') + ' ' + (d.source_domain || '')).toLowerCase();
       if (!hay.includes(q)) return false;
@@ -143,9 +146,15 @@ function renderDeals() {
       + '<div class="meta"><span>来源：' + escapeHtml(d.source_domain || '') + '</span>'
       + '<span>抓取：' + escapeHtml(d.fetched_date || '') + '</span>'
       + '<a href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener noreferrer">打开链接 ↗</a>'
+      + '<label class="assign">归属 <select data-assign="' + escapeHtml(d.url) + '">' + accountOptions(dealAccounts[d.url] || '') + '</select></label>'
       + '<button class="fav-btn' + (fav ? ' on' : '') + '" data-fav="' + escapeHtml(d.url) + '">' + (fav ? '★ 已收藏' : '☆ 收藏') + '</button>'
       + '</div></article>';
   }).join('');
+  el.querySelectorAll('[data-assign]').forEach((s) => s.addEventListener('change', () => {
+    const url = s.dataset.assign;
+    if (s.value) dealAccounts[url] = s.value; else delete dealAccounts[url];
+    saveJson(LS.dealAccounts, dealAccounts);
+  }));
   el.querySelectorAll('[data-fav]').forEach((b) => b.addEventListener('click', () => {
     const url = b.dataset.fav;
     if (favorites.has(url)) favorites.delete(url); else favorites.add(url);
@@ -218,6 +227,7 @@ function renderResources() {
         ? '<span class="' + (expired ? 'expired' : '') + '">' + escapeHtml(r.expires_date) + (expired ? '（已到期）' : '') + '</span>'
         : '—') + '</p>'
       + (r.note ? '<p>备注：' + escapeHtml(r.note) + '</p>' : '')
+      + (r.accountId ? '<p>归属账号：' + escapeHtml(accountLabel(r.accountId)) + '</p>' : '')
       + '</div><div class="actions">'
       + '<button class="mini-btn" data-edit-res="' + r.id + '">编辑</button>'
       + '<button class="mini-btn danger" data-del-res="' + r.id + '">删除</button>'
@@ -234,6 +244,7 @@ function renderResources() {
     $('#resClaimed').value = r.claimed_date || '';
     $('#resExpires').value = r.expires_date || '';
     $('#resNote').value = r.note || '';
+    $('#resAccount').value = r.accountId || '';
     $('#resourceFormTitle').textContent = '编辑资源';
     $('#resCancel').classList.remove('hidden');
     if (typeof $('#resourceForm').scrollIntoView === 'function') {
@@ -257,6 +268,7 @@ $('#resourceForm').addEventListener('submit', (e) => {
     claimed_date: $('#resClaimed').value || '',
     expires_date: $('#resExpires').value || '',
     note: $('#resNote').value.trim(),
+    accountId: $('#resAccount').value || '',
   };
   if (!data.title) return;
   const id = $('#resId').value;
@@ -328,6 +340,249 @@ $('#checkinForm').addEventListener('submit', (e) => {
   renderCheckins();
 });
 
+/* ---------- 账号绑定 ----------
+ * 会话只存在本机浏览器 localStorage（hym_accounts），后端是无状态中转，不保存任何会话。
+ * 绑定流程：明确同意 → 选平台和方式 → 扫码（后端返回二维码，前端轮询状态）
+ * 或短信（后端转发发码/校验请求）→ 成功后会话由前端存入本机。解绑即清除本机存储。 */
+let backendAvailable = false;
+let platformList = [];
+let accounts = loadJson(LS.accounts, []);
+let dealAccounts = loadJson(LS.dealAccounts, {});
+let accountFilter = '';
+let qrPollTimer = null;
+let qrAttemptId = null;
+let qrExpiresTimer = null;
+let smsAttemptId = null;
+let smsCooldownUntil = 0;
+
+function platformName(id) {
+  const p = platformList.find((x) => x.id === id);
+  return p ? p.name : id;
+}
+function accountLabel(id) {
+  const a = accounts.find((x) => x.id === id);
+  return a ? (platformName(a.platform) + ' ' + a.displayId) : '（账号已解绑）';
+}
+function accountOptions(selectedId) {
+  return '<option value="">不指定</option>' + accounts.map((a) =>
+    '<option value="' + a.id + '"' + (a.id === selectedId ? ' selected' : '') + '>'
+    + escapeHtml(platformName(a.platform) + ' ' + a.displayId) + '</option>').join('');
+}
+function refreshAccountSelects() {
+  const resSel = $('#resAccount');
+  if (resSel) resSel.innerHTML = accountOptions(resSel.value || '');
+  const fSel = $('#accountFilter');
+  if (fSel) {
+    const cur = fSel.value || '';
+    fSel.innerHTML = '<option value="">全部账号</option>' + accounts.map((a) =>
+      '<option value="' + a.id + '"' + (a.id === cur ? ' selected' : '') + '>'
+      + escapeHtml(platformName(a.platform) + ' ' + a.displayId) + '</option>').join('');
+  }
+}
+
+async function checkBackend() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch('/api/platforms', { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!r.ok) throw new Error('no api');
+    const data = await r.json();
+    platformList = data.platforms || [];
+    backendAvailable = true;
+    $('#backendNote').textContent = '本地后端已连接。绑定仅在明确同意后进行，会话只保存在本机浏览器。';
+    $('#accountsMain').classList.remove('hidden');
+    renderBindPlatforms();
+    renderAccounts();
+    refreshAccountSelects();
+  } catch (e) {
+    backendAvailable = false;
+    $('#backendNote').textContent = '账号绑定需要先启动本地后端：进入 server 目录执行 node server.js（或 npm start），然后刷新本页。未启动后端时，线报、资源、签到功能不受影响。';
+    $('#accountsMain').classList.add('hidden');
+  }
+}
+
+function currentPlatform() {
+  return platformList.find((p) => p.id === $('#bindPlatform').value) || null;
+}
+function renderBindPlatforms() {
+  const sel = $('#bindPlatform');
+  sel.innerHTML = platformList.map((p) =>
+    '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>').join('');
+  updateMethodNote();
+}
+function updateMethodNote() {
+  const p = currentPlatform();
+  const method = $('#bindMethod').value;
+  const m = p && (p.methods || []).find((x) => x.id === method);
+  $('#methodNote').textContent = m && m.note ? m.note : '';
+  $('#qrBox').classList.toggle('hidden', method !== 'qr');
+  $('#smsBox').classList.toggle('hidden', method !== 'sms');
+}
+
+function stopQrPoll() {
+  if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+  if (qrExpiresTimer) { clearTimeout(qrExpiresTimer); qrExpiresTimer = null; }
+  qrAttemptId = null;
+}
+
+function saveAccount(account, session) {
+  const rec = {
+    id: uid(),
+    platform: account.platform,
+    displayId: account.displayId,
+    method: account.method,
+    boundAt: account.boundAt || new Date().toISOString(),
+    session: session || null,
+  };
+  accounts = accounts.filter((a) => !(a.platform === rec.platform && a.displayId === rec.displayId));
+  accounts.push(rec);
+  saveJson(LS.accounts, accounts);
+  renderAccounts();
+  refreshAccountSelects();
+  renderResources();
+  renderDeals();
+}
+
+async function startQr() {
+  if (!$('#consentBox').checked) { alert('请先勾选同意。'); return; }
+  stopQrPoll();
+  const platform = $('#bindPlatform').value;
+  $('#qrStatus').textContent = '正在获取二维码…';
+  $('#qrImg').classList.add('hidden');
+  try {
+    const r = await fetch('/api/accounts/qr/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platform, consent: true }),
+    });
+    const data = await r.json();
+    if (!data.ok) { $('#qrStatus').textContent = '获取失败：' + (data.message || ''); return; }
+    qrAttemptId = data.attemptId;
+    const img = $('#qrImg');
+    img.src = data.qrImage || data.qrImageUrl || '';
+    img.classList.remove('hidden');
+    $('#qrStatus').textContent = '请用对应平台 App 扫码（' + (data.expiresInSec || 120) + ' 秒内有效）';
+    $('#qrRefreshBtn').classList.remove('hidden');
+    qrPollTimer = setInterval(pollQr, 3000);
+    qrExpiresTimer = setTimeout(() => {
+      if (qrAttemptId) {
+        stopQrPoll();
+        $('#qrStatus').textContent = '二维码已过期，请重新获取。';
+      }
+    }, (data.expiresInSec || 120) * 1000);
+  } catch (e) {
+    $('#qrStatus').textContent = '获取失败：网络错误。';
+  }
+}
+async function pollQr() {
+  if (!qrAttemptId) return;
+  try {
+    const r = await fetch('/api/accounts/qr/status?attemptId=' + encodeURIComponent(qrAttemptId));
+    const data = await r.json();
+    if (!data.ok) {
+      stopQrPoll();
+      $('#qrStatus').textContent = data.message || '登录尝试已过期，请重新获取二维码。';
+      return;
+    }
+    if (data.status === 'success') {
+      stopQrPoll();
+      saveAccount(data.account, data.session);
+      $('#qrStatus').textContent = '绑定成功：' + data.account.displayId;
+      return;
+    }
+    if (data.status === 'expired' || data.status === 'error') {
+      stopQrPoll();
+      $('#qrStatus').textContent = data.message || '二维码已失效，请重新获取。';
+      return;
+    }
+    $('#qrStatus').textContent = data.message || (data.status === 'scanned' ? '已扫码，请在手机上确认登录' : '等待扫码…');
+  } catch (e) { /* 网络抖动时继续轮询 */ }
+}
+
+async function sendSms() {
+  if (!$('#consentBox').checked) { alert('请先勾选同意。'); return; }
+  const phone = $('#smsPhone').value.trim();
+  if (!/^1[3-9]\d{9}$/.test(phone)) { $('#smsStatus').textContent = '手机号格式不正确。'; return; }
+  if (Date.now() < smsCooldownUntil) { $('#smsStatus').textContent = '发送过于频繁，请稍后再试。'; return; }
+  $('#smsStatus').textContent = '正在发送…';
+  try {
+    const r = await fetch('/api/accounts/sms/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: $('#bindPlatform').value, phone, consent: true }),
+    });
+    const data = await r.json();
+    if (!data.ok) { $('#smsStatus').textContent = data.message || '发送失败。'; return; }
+    smsAttemptId = data.attemptId;
+    smsCooldownUntil = Date.now() + 60000;
+    $('#smsStatus').textContent = data.message || '短信已发送，请填写验证码。';
+  } catch (e) {
+    $('#smsStatus').textContent = '发送失败：网络错误。';
+  }
+}
+async function verifySms() {
+  const code = $('#smsCode').value.trim();
+  if (!/^\d{6}$/.test(code)) { $('#smsStatus').textContent = '短信验证码必须是六位数字。'; return; }
+  if (!smsAttemptId) { $('#smsStatus').textContent = '请先发送验证码。'; return; }
+  $('#smsStatus').textContent = '正在校验…';
+  try {
+    const r = await fetch('/api/accounts/sms/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ attemptId: smsAttemptId, code }),
+    });
+    const data = await r.json();
+    if (!data.ok) { $('#smsStatus').textContent = data.message || '校验失败。'; return; }
+    saveAccount(data.account, data.session);
+    smsAttemptId = null;
+    $('#smsStatus').textContent = '绑定成功：' + data.account.displayId;
+  } catch (e) {
+    $('#smsStatus').textContent = '校验失败：网络错误。';
+  }
+}
+
+function renderAccounts() {
+  const el = $('#accountList');
+  $('#accountEmpty').classList.toggle('hidden', accounts.length > 0);
+  el.innerHTML = accounts.map((a) =>
+    '<article class="card account">'
+    + '<div class="info"><h3>' + escapeHtml(platformName(a.platform)) + ' · ' + escapeHtml(a.displayId) + '</h3>'
+    + '<p>方式：' + escapeHtml(a.method === 'qr' ? '扫码登录' : '短信登录')
+    + '　绑定时间：' + escapeHtml(new Date(a.boundAt).toLocaleString()) + '</p>'
+    + '<p>会话只保存在本机浏览器，不上传到任何服务器。</p></div>'
+    + '<div class="actions"><button class="mini-btn danger" data-unbind="' + a.id + '">解绑</button></div>'
+    + '</article>').join('');
+  el.querySelectorAll('[data-unbind]').forEach((b) => b.addEventListener('click', () => {
+    const a = accounts.find((x) => x.id === b.dataset.unbind);
+    if (!a) return;
+    if (!confirm('确定解绑 ' + platformName(a.platform) + ' ' + a.displayId + ' 吗？本机保存的该账号会话将立即清除。')) return;
+    accounts = accounts.filter((x) => x.id !== a.id);
+    saveJson(LS.accounts, accounts);
+    resources = resources.map((r) => (r.accountId === a.id ? Object.assign({}, r, { accountId: '' }) : r));
+    saveJson(LS.resources, resources);
+    for (const k of Object.keys(dealAccounts)) {
+      if (dealAccounts[k] === a.id) delete dealAccounts[k];
+    }
+    saveJson(LS.dealAccounts, dealAccounts);
+    renderAccounts();
+    refreshAccountSelects();
+    renderResources();
+    renderDeals();
+  }));
+}
+
+$('#bindPlatform').addEventListener('change', updateMethodNote);
+$('#bindMethod').addEventListener('change', updateMethodNote);
+$('#qrStartBtn').addEventListener('click', startQr);
+$('#qrRefreshBtn').addEventListener('click', startQr);
+$('#smsSendBtn').addEventListener('click', sendSms);
+$('#smsVerifyBtn').addEventListener('click', verifySms);
+$('#accountFilter').addEventListener('change', (e) => {
+  accountFilter = e.target.value;
+  renderDeals();
+});
+
 /* ---------- 启动 ---------- */
 function loadBundledDeals() {
   if (typeof fetch !== 'function') {
@@ -365,4 +620,5 @@ function loadBundledDeals() {
   renderDeals();
   renderResources();
   renderCheckins();
+  checkBackend();
 })();
