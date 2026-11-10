@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>薅羊毛 - 优惠线报与免费资源</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>🧶 薅羊毛</h1>
+    <p class="tagline">优惠线报、免费试用、云电脑与 AI 免费额度，一处汇总</p>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="deals" role="tab">线报</button>
+      <button class="tab" data-tab="resources" role="tab">我的资源</button>
+      <button class="tab" data-tab="checkins" role="tab">每日签到</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 线报 -->
+  <section id="tab-deals" class="panel active">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="搜索标题、内容或来源…" aria-label="搜索线报">
+      <label class="fav-only"><input type="checkbox" id="favOnly"> 只看收藏</label>
+      <span class="count" id="dealCount"></span>
+    </div>
+    <div class="filter-group" id="platformFilters" aria-label="按平台筛选"></div>
+    <div class="filter-group" id="typeFilters" aria-label="按类型筛选"></div>
+    <div class="toolbar sub">
+      <button id="importBtn" class="btn small">导入线报 JSON</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button id="resetDealsBtn" class="btn small ghost">恢复内置数据</button>
+      <span class="hint" id="dataSourceNote"></span>
+    </div>
+    <div id="dealList" class="deal-list"></div>
+    <p class="empty hidden" id="dealEmpty">没有符合条件的线报。</p>
+  </section>
+
+  <!-- 我的资源 -->
+  <section id="tab-resources" class="panel">
+    <p class="section-note">已领取的云电脑、服务器、AI 额度等资源，登记后集中管理，到期前注意续期或重新领取。</p>
+    <form id="resourceForm" class="card form">
+      <h2 id="resourceFormTitle">添加资源</h2>
+      <input type="hidden" id="resId">
+      <label>名称 <input id="resTitle" required maxlength="120" placeholder="例如：某云免费 VPS"></label>
+      <label>链接 <input id="resUrl" type="url" maxlength="500" placeholder="https://…"></label>
+      <div class="form-row">
+        <label>类型
+          <select id="resType">
+            <option value="云电脑">云电脑</option>
+            <option value="服务器">服务器</option>
+            <option value="AI额度">AI额度</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label>注册方式
+          <select id="resAuth">
+            <option value="Google">Google</option>
+            <option value="邮箱">邮箱</option>
+            <option value="手机号">手机号</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>领取日期 <input id="resClaimed" type="date"></label>
+        <label>到期日期 <input id="resExpires" type="date"></label>
+      </div>
+      <label>备注 <input id="resNote" maxlength="200" placeholder="套餐、额度、注意事项等"></label>
+      <div class="form-actions">
+        <button type="submit" class="btn">保存</button>
+        <button type="button" id="resCancel" class="btn ghost hidden">取消编辑</button>
+      </div>
+    </form>
+    <div id="resourceList" class="resource-list"></div>
+    <p class="empty hidden" id="resourceEmpty">暂无已登记资源，点击上方表单添加。</p>
+  </section>
+
+  <!-- 每日签到 -->
+  <section id="tab-checkins" class="panel">
+    <p class="section-note">把各平台 App 的每日签到任务记下来，每天打卡，连续天数自动累计。</p>
+    <form id="checkinForm" class="card form inline">
+      <input id="checkinName" required maxlength="60" placeholder="任务名称，例如：京东签到">
+      <button type="submit" class="btn">添加任务</button>
+    </form>
+    <div id="checkinList" class="checkin-list"></div>
+    <p class="empty hidden" id="checkinEmpty">暂无签到任务，先添加一个。</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>线报来自公开渠道，内容未经核实，活动有时效性，以平台实际页面为准，领取前请自行甄别，谨防受骗。</p>
+    <p>数据仅保存在本机浏览器（localStorage），不上传到任何服务器。</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
